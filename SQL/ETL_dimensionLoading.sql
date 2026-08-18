@@ -41,7 +41,7 @@ CREATE TABLE logistics (
 -- Loading done using IMPORT/EXPORT OPTION
 
 
--- Creating dimension tables for our use case, following a snowflake schema
+-- Creating dimension tables for our use case, following a star schema
 create table dim_time(
 	time_id serial primary key,
 	shipment_date date,
