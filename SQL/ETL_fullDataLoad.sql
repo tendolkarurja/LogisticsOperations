@@ -2,6 +2,7 @@ select * from logistics;
 
 select * from dim_transport;
 
+select * from dim_corridor
 
 CREATE TABLE fact_shipment (
     fact_id SERIAL PRIMARY KEY,
@@ -120,6 +121,67 @@ JOIN dim_weather w
 JOIN dim_time ti
     ON l.shipment_date = ti.shipment_date;
 
+select * from fact_shipment;
+
+-- Handling columns or values that were originally missed out
+UPDATE fact_shipment f
+SET corridor_id = c.corridor_id
+FROM dim_corridor c
+WHERE LEAST(f.origin_port_id, f.destination_port_id) = c.port1_id
+  AND GREATEST(f.origin_port_id, f.destination_port_id) = c.port2_id
+
+alter table fact_shipment
+add column disruption bool
+
+alter table fact_shipment
+add column shipmentId char(10)
+
+-- For future update, checking if all numerical attributes uniquely identifies a row.
+SELECT
+    weight_mt,
+    fuel_price_index,
+    geopolitical_risk_score,
+    carrier_reliability_score,
+    lead_time_days,
+    COUNT(*)
+FROM logistics
+GROUP BY
+    weight_mt,
+    fuel_price_index,
+    geopolitical_risk_score,
+    carrier_reliability_score,
+    lead_time_days
+HAVING COUNT(*) > 1;
+
+-- Mere numerical values matching would have worked as each record is unique. 
+-- To be safe, the most robus version is implemented through joins.
+UPDATE fact_shipment f
+SET shipmentId = l.shipment_id,
+    disruption = l.disruption_occurred
+FROM logistics l
+JOIN dim_transport tr
+    ON tr.transport_mode = l.transport_mode
+JOIN dim_product d
+    ON d.product_category = l.product_category
+JOIN dim_risk r
+    ON r.risk_category = l.geopolitical_risk_class
+JOIN dim_weather w
+    ON w.weather_condition = l.weather_condition
+JOIN dim_time t
+    ON t.shipment_date = l.shipment_date
+JOIN dim_corridor c
+    ON c.trade_corridor = l.trade_corridor
+WHERE f.transport_id = tr.transport_id
+  AND f.product_id = d.product_id
+  AND f.risk_id = r.risk_id
+  AND f.weather_id = w.weather_id
+  AND f.time_id = t.time_id
+  AND f.corridor_id = c.corridor_id
+  AND f.weight_mt = l.weight_mt
+  AND f.fuel_price_index = l.fuel_price_index
+  AND f.geopolitical_risk_score = l.geopolitical_risk_score
+  AND f.carrier_reliability_score = l.carrier_reliability_score
+  AND f.lead_time_days = l.lead_time_days;
 
 select * from fact_shipment;
 
@@ -130,5 +192,8 @@ SELECT
     COUNT(*) FILTER (WHERE product_id IS NULL) AS null_product,
     COUNT(*) FILTER (WHERE risk_id IS NULL) AS null_risk,
     COUNT(*) FILTER (WHERE weather_id IS NULL) AS null_weather,
-    COUNT(*) FILTER (WHERE time_id IS NULL) AS null_time
+    COUNT(*) FILTER (WHERE time_id IS NULL) AS null_time,
+	COUNT(*) FILTER (WHERE disruption is null) as null_disruption,
+	count(*) filter (where corridor_id is null) as null_corridor,
+	count(*) filter (where shipmentId is null) as null_ship
 FROM fact_shipment;
